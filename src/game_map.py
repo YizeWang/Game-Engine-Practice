@@ -33,6 +33,8 @@ COLORS = [
 # Animation speed (seconds)
 PAUSE_PERIOD = 0.01
 
+# Flow field arrow length
+ARROW_LENGTH = 0.2
 
 # Figure size
 FIGURE_SIZE = (6, 6)
@@ -68,8 +70,9 @@ class Grid:
         self.cost_to_come: float = None
         self.heuristic: float = None
 
-        # Fluid field
+        # Flow field
         self.cost_to_go: float = None
+        self.flow_direction: Point = None
         self.is_visited_inverse: bool = False
 
         # Cell state flags
@@ -147,7 +150,7 @@ class GameMap:
         return self.grid_map[point.x][point.y].is_obstacle
 
     def get_adjacent_points(self, pt: Point) -> List[Point]:
-        return [Point(pt.x + i, pt.y + j) for i in range(-1, 2) for j in range(-1, 2)]
+        return [Point(pt.x + i, pt.y + j) for i in range(-1, 2) for j in range(-1, 2) if i != j]  # fmt: skip
 
     def update_visualization_map(self) -> None:
         """Update the visualization map based on current grid state."""
@@ -181,6 +184,16 @@ class GameMap:
                 if self.grid_map[x][y].cost_to_go is not None:
                     text = "{:.1f}".format(self.grid_map[x][y].cost_to_go)
                     plt.text(y + 0.5, x + 0.55, text, ha="center", va="center", color="k", fontsize=8)  # fmt: skip
+
+    def show_flow_field(self) -> None:
+        for x in range(X):
+            for y in range(Y):
+                dir = self.grid_map[x][y].flow_direction
+                if self.grid_map[x][y].flow_direction is not None:
+                    norm = dir.norm()
+                    dx = ARROW_LENGTH * dir.x / norm
+                    dy = ARROW_LENGTH * dir.y / norm
+                    plt.arrow(y + 0.5, x + 0.5, dy, dx, head_width=0.1, head_length=0.1, fc="k", ec="k")  # fmt: skip
 
     def show_map(self) -> None:
         """Display the current state of the map."""
@@ -265,7 +278,7 @@ class GameMap:
             for point in self.get_adjacent_points(curr):
                 if not self.is_step_feasible(curr, point):
                     continue
-    
+
                 grid = self.grid_map[point.x][point.y]
                 if grid.is_visited_inverse:
                     continue
@@ -276,6 +289,25 @@ class GameMap:
 
                 queue.put(point)
                 self.grid_map[point.x][point.y].cost_to_go = new_cost
+
+    def update_flow_field(self) -> None:
+        for x in range(self.X):
+            for y in range(self.Y):
+                curr = Point(x, y)
+                if self.is_obstacle(curr):
+                    continue
+
+                max_descent = None
+                for point in self.get_adjacent_points(Point(x, y)):
+                    if not self.is_step_feasible(curr, point):
+                        continue
+
+                    cost = self.grid_map[point.x][point.y].cost_to_go
+                    curr_cost = self.grid_map[x][y].cost_to_go
+                    descent = cost - curr_cost
+                    if max_descent is None or descent > max_descent:
+                        max_descent = descent
+                        self.grid_map[x][y].flow_direction = point - curr
 
     def breadth_first_search(self, source: Point, target: Point) -> bool:
         """Perform BFS pathfinding from source to target."""
@@ -440,6 +472,10 @@ if __name__ == "__main__":
 
     game_map.update_cost_to_go_map()
     game_map.show_cost_to_go()
+    # plt.draw()
+
+    game_map.update_flow_field()
+    game_map.show_flow_field()
     plt.draw()
 
     if is_path_found:
