@@ -5,10 +5,9 @@ from queue import Queue, LifoQueue, PriorityQueue
 from dataclasses import dataclass
 from enum import IntEnum
 import math
-from typing import List, Optional, Set, Tuple
+from typing import List
 
 
-# Color definitions for visualization
 class CellColor(IntEnum):
     """Enum defining colors for different cell states in the grid."""
 
@@ -35,6 +34,10 @@ COLORS = [
 PAUSE_PERIOD = 0.001
 
 
+# Figure size
+FIGURE_SIZE = (6, 6)
+
+
 @dataclass
 class Point:
     """Represents a 2D point with x,y coordinates."""
@@ -42,13 +45,13 @@ class Point:
     x: int
     y: int
 
-    def __eq__(self, other: object) -> bool:
+    def __eq__(self, other: "Point") -> bool:
         return self.x == other.x and self.y == other.y
 
     def __hash__(self) -> int:
         return hash((self.x, self.y))
 
-    def __sub__(self, other):
+    def __sub__(self, other: "Point") -> "Point":
         return Point(self.x - other.x, self.y - other.y)
 
     def norm(self) -> float:
@@ -74,10 +77,22 @@ class Grid:
         self.is_on_path: bool = False
 
 
+class PriorityEntry:
+    coordinate: Point
+    cost: float
+
+    def __init__(self, coordinate: Point, cost: float):
+        self.coordinate = coordinate
+        self.cost = cost
+
+    def __lt__(self, other):
+        return self.cost < other.cost
+
+
 class GameMap:
     """Main class for managing the game grid and pathfinding visualization."""
 
-    def __init__(self, X: int, Y: int):
+    def __init__(self, X: int, Y: int) -> None:
         """Initialize game map with given dimensions."""
         self.X = X
         self.Y = Y
@@ -88,7 +103,7 @@ class GameMap:
         self.custom_cmap = ListedColormap(COLORS)
         self.grid_map = [[Grid(x, y) for y in range(Y)] for x in range(X)]
         self.visualization_map = np.zeros((X, Y), dtype=int)
-        self.img: Optional[plt.AxesImage] = None
+        self.img: plt.AxesImage = None
 
     def set_init_point(self, x: int, y: int) -> None:
         """Set the starting point on the grid."""
@@ -139,25 +154,22 @@ class GameMap:
             for y in range(self.Y):
                 grid = self.grid_map[x][y]
                 if grid.is_target:
-                    self.visualization_map[x][y] = CellColor.TARGET
-                    continue
-                if grid.is_source:
-                    self.visualization_map[x][y] = CellColor.SOURCE
-                    continue
-                if grid.is_obstacle:
-                    self.visualization_map[x][y] = CellColor.OBSTACLE
-                    continue
-                if grid.is_visited:
-                    self.visualization_map[x][y] = CellColor.VISITED
-                    continue
-                if grid.is_to_visit:
-                    self.visualization_map[x][y] = CellColor.TO_VISIT
-                    continue
-                self.visualization_map[x][y] = CellColor.DEFAULT
+                    color = CellColor.TARGET
+                elif grid.is_source:
+                    color = CellColor.SOURCE
+                elif grid.is_obstacle:
+                    color = CellColor.OBSTACLE
+                elif grid.is_visited:
+                    color = CellColor.VISITED
+                elif grid.is_to_visit:
+                    color = CellColor.TO_VISIT
+                else:
+                    color = CellColor.DEFAULT
+                self.visualization_map[x][y] = color
 
     def show_map(self) -> None:
         """Display the current state of the map."""
-        plt.figure(figsize=(6, 6))
+        plt.figure(figsize=FIGURE_SIZE)
         extent = [0, self.X, self.Y, 0]
         self.img = plt.imshow(
             self.visualization_map,
@@ -169,18 +181,12 @@ class GameMap:
             origin="upper",
         )
 
-        # Set the aspect ratio to be equal
         plt.gca().set_aspect("equal", adjustable="box")
-
-        # Add grid lines
         plt.xticks(np.arange(self.X))
         plt.yticks(np.arange(self.Y))
         plt.grid(which="both", color="black", linestyle="-", linewidth=1)
-
-        # Set the title
         plt.title("Game Grid Map")
 
-        # Show the plot
         self.img.set_array(self.visualization_map)
         plt.draw()
 
@@ -212,6 +218,13 @@ class GameMap:
         y = [point.x + 0.5 for point in self.point_path]
         plt.plot(x, y, color=COLORS[CellColor.PATH])
 
+    def is_step_feasible(self, point: Point) -> bool:
+        return (
+            not self.is_point_inside_grid_map(point)
+            or self.grid_map[point.x][point.y].is_visited
+            or self.is_obstacle(point)
+        )
+
     def breadth_first_search(self, source: Point, target: Point) -> bool:
         """Perform BFS pathfinding from source to target."""
         queue: Queue[Point] = Queue()
@@ -219,21 +232,18 @@ class GameMap:
 
         while not queue.empty():
             curr = queue.get()
-            if self.grid_map[curr.x][curr.y].is_target:
+            curr_grid = self.grid_map[curr.x][curr.y]
+            if curr_grid.is_target:
                 return True
 
-            if self.grid_map[curr.x][curr.y].is_visited:
+            if curr_grid.is_visited:
                 continue
 
-            self.grid_map[curr.x][curr.y].is_to_visit = False
-            self.grid_map[curr.x][curr.y].is_visited = True
+            curr_grid.is_to_visit = False
+            curr_grid.is_visited = True
 
             for point in self.get_adjacent_points(curr):
-                if (
-                    not self.is_point_inside_grid_map(point)
-                    or self.grid_map[point.x][point.y].is_visited
-                    or self.is_obstacle(point)
-                ):
+                if self.is_step_feasible(point):
                     continue
 
                 queue.put(point)
@@ -247,88 +257,79 @@ class GameMap:
 
         return False
 
-    # def a_star(self, source: Point, target: Point):
-    #     visited = set()
-    #     to_visit = set()
-    #     pq = PriorityQueue()
-    #     pq.put(GridWithCost(source, 0, self.calculate_heuristic(source)))
-    #     to_visit.add(source)
-    #     while not pq.empty():
-    #         curr = pq.get()
-    #         if curr.point in to_visit:
-    #             to_visit.remove(curr.point)
-    #         if curr.point in visited:
-    #             continue
-    #         visited.add(curr.point)
-    #         value = self.grid_map[curr.point.x][curr.point.y]
-    #         if value == TARGET_COLOR:
-    #             return True
-    #         adj = self.get_adjacent_points(curr.point)
-    #         for point in adj:
-    #             if (
-    #                 (not self.is_point_inside_grid_map(point))
-    #                 or (point in visited)
-    #                 or (self.is_obstacle(point))
-    #             ):
-    #                 continue
-    #             pq.put(
-    #                 GridWithCost(
-    #                     point, curr.cost_to_come + 1, self.calculate_heuristic(point)
-    #                 )
-    #             )
-    #             to_visit.add(point)
+    def depth_first_search(self, source: Point, target: Point) -> bool:
+        """Perform DFS pathfinding from source to target."""
+        stack: LifoQueue[Point] = LifoQueue()
+        stack.put(source)
 
-    #         self.update_grid_map(visited, to_visit)
-    #         self.img.set_array(self.grid_map)
-    #         plt.draw()
-    #         plt.pause(PAUSE_PERIOD)
-    #     return False
+        while not stack.empty():
+            curr = stack.get()
+            curr_grid = self.grid_map[curr.x][curr.y]
+            if curr_grid.is_target:
+                return True
 
-    # def depth_first_search(self, source: Point, target: Point) -> bool:
-    #     visited = set()
-    #     to_visit = set()
-    #     stack = LifoQueue()
-    #     stack.put(source)
-    #     to_visit.add(source)
-    #     while not stack.empty():
-    #         curr = stack.get()
-    #         if curr in to_visit:
-    #             to_visit.remove(curr)
-    #         if curr in visited:
-    #             continue
-    #         visited.add(curr)
-    #         value = self.grid_map[curr.x][curr.y]
-    #         if value == TARGET_COLOR:
-    #             return True
-    #         adj = self.get_adjacent_points(curr)
-    #         for point in adj:
-    #             if (
-    #                 (not self.is_point_inside_grid_map(point))
-    #                 or (point in visited)
-    #                 or (self.is_obstacle(point))
-    #             ):
-    #                 continue
-    #             stack.put(point)
-    #             to_visit.add(point)
-
-    #         self.update_grid_map(visited, to_visit)
-    #         self.img.set_array(self.grid_map)
-    #         plt.draw()
-    #         plt.pause(PAUSE_PERIOD)
-    #         return False
-    #     return False
-
-    def update_grid_map(self, visited: Set[Point], to_visit: Set[Point]) -> None:
-        """Update grid map with visited and to-visit cells."""
-        for point in visited:
-            if point in (self.init_point, self.term_point):
+            if curr_grid.is_visited:
                 continue
-            self.grid_map[point.x][point.y] = CellColor.VISITED
 
-        for point in to_visit:
-            if point in (self.init_point, self.term_point) or point in visited:
+            curr_grid.is_to_visit = False
+            curr_grid.is_visited = True
+
+            for point in self.get_adjacent_points(curr):
+                if self.is_step_feasible(point):
+                    continue
+
+                stack.put(point)
+                self.grid_map[point.x][point.y].is_to_visit = True
+                self.grid_map[point.x][point.y].previous_coordinate = curr
+
+            self.update_visualization_map()
+            self.img.set_array(self.visualization_map)
+            plt.draw()
+            plt.pause(PAUSE_PERIOD)
+
+        return False
+
+    def a_star(self, source: Point, target: Point) -> bool:
+        """Perform A* pathfinding from source to target."""
+        pq: PriorityQueue[PriorityEntry] = PriorityQueue()
+        pq.put(PriorityEntry(source, self.calculate_heuristic(source)))
+
+        # Initialize source node
+        self.grid_map[source.x][source.y].cost_to_come = 0
+        self.grid_map[source.x][source.y].heuristic = self.calculate_heuristic(source)
+
+        while not pq.empty():
+            curr = pq.get().coordinate
+            curr_grid = self.grid_map[curr.x][curr.y]
+            if curr_grid.is_target:
+                return True
+
+            if curr_grid.is_visited:
                 continue
-            self.grid_map[point.x][point.y] = CellColor.TO_VISIT
+
+            curr_grid.is_to_visit = False
+            curr_grid.is_visited = True
+
+            for point in self.get_adjacent_points(curr):
+                if self.is_step_feasible(point):
+                    continue
+
+                grid = self.grid_map[point.x][point.y]
+                grid.cost_to_come = curr_grid.cost_to_come + 1
+                grid.heuristic = self.calculate_heuristic(point)
+                cost = grid.cost_to_come + grid.heuristic
+
+                pq.put(PriorityEntry(point, cost))
+                grid.is_to_visit = True
+                grid.previous_coordinate = curr
+
+            # Update visualization
+            self.update_visualization_map()
+            self.img.set_array(self.visualization_map)
+            plt.draw()
+            plt.pause(PAUSE_PERIOD)
+
+        return False
 
     def is_point_inside_grid_map(self, point: Point) -> bool:
         """Check if point is within grid boundaries."""
@@ -352,14 +353,14 @@ if __name__ == "__main__":
     game_map.add_obstacle_line(Point(13, 10), Point(9, 14))
 
     game_map.show_map()
-    game_map.breadth_first_search(source_point, target_point)
+    # game_map.breadth_first_search(source_point, target_point)
+    # game_map.depth_first_search(source_point, target_point)
+    game_map.a_star(source_point, target_point)
 
     game_map.update_visualization_map()
+    game_map.img.set_array(game_map.visualization_map)
+
     game_map.update_path(game_map.term_point)
     game_map.visualize_path()
 
-    if game_map.img is not None:
-        game_map.img.set_array(game_map.visualization_map)
-        plt.draw()
-        plt.pause(PAUSE_PERIOD)
-        plt.show()
+    plt.show()
