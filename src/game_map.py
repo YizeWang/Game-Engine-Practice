@@ -142,11 +142,8 @@ class GameMap:
         """Check if a point is an obstacle."""
         return self.grid_map[point.x][point.y].is_obstacle
 
-    def get_adjacent_points(self, point: Point) -> List[Point]:
-        """Get list of adjacent points (up, down, left, right)."""
-        return [Point(point.x + i, point.y) for i in [-1, 1]] + [
-            Point(point.x, point.y + j) for j in [-1, 1]
-        ]
+    def get_adjacent_points(self, pt: Point) -> List[Point]:
+        return [Point(pt.x + i, pt.y + j) for i in range(-1, 2) for j in range(-1, 2)]
 
     def update_visualization_map(self) -> None:
         """Update the visualization map based on current grid state."""
@@ -190,10 +187,11 @@ class GameMap:
         self.img.set_array(self.visualization_map)
         plt.draw()
 
-    def calculate_heuristic(self, point: Point) -> float:
-        """Calculate Manhattan distance heuristic to target."""
-        diff = self.term_point - point
-        return abs(diff.x) + abs(diff.y)
+    def calc_heuristic(self, point: Point) -> float:
+        return self.calc_cost(point, self.term_point)
+
+    def calc_cost(self, point1: Point, point2: Point) -> float:
+        return (point1 - point2).norm()
 
     def backtrace_path(self, point: Point) -> List[Point]:
         """Reconstruct path from target back to source."""
@@ -218,12 +216,18 @@ class GameMap:
         y = [point.x + 0.5 for point in self.point_path]
         plt.plot(x, y, color=COLORS[CellColor.PATH])
 
-    def is_step_feasible(self, point: Point) -> bool:
-        return (
-            not self.is_point_inside_grid_map(point)
-            or self.grid_map[point.x][point.y].is_visited
-            or self.is_obstacle(point)
-        )
+    def is_step_feasible(self, start: Point, end: Point) -> bool:
+        if not self.is_point_inside_grid_map(end):
+            return False
+        if self.grid_map[end.x][end.y].is_visited:
+            return False
+        if start.x == end.x or start.y == end.y:
+            return not self.is_obstacle(end)
+        if self.is_obstacle(end):
+            return False
+        diag_point1 = Point(start.x, end.y)
+        diag_point2 = Point(end.x, start.y)
+        return not (self.is_obstacle(diag_point1) and self.is_obstacle(diag_point2))
 
     def breadth_first_search(self, source: Point, target: Point) -> bool:
         """Perform BFS pathfinding from source to target."""
@@ -243,7 +247,7 @@ class GameMap:
             curr_grid.is_visited = True
 
             for point in self.get_adjacent_points(curr):
-                if self.is_step_feasible(point):
+                if not self.is_step_feasible(curr, point):
                     continue
 
                 queue.put(point)
@@ -275,7 +279,7 @@ class GameMap:
             curr_grid.is_visited = True
 
             for point in self.get_adjacent_points(curr):
-                if self.is_step_feasible(point):
+                if not self.is_step_feasible(curr, point):
                     continue
 
                 stack.put(point)
@@ -292,11 +296,11 @@ class GameMap:
     def a_star(self, source: Point, target: Point) -> bool:
         """Perform A* pathfinding from source to target."""
         pq: PriorityQueue[PriorityEntry] = PriorityQueue()
-        pq.put(PriorityEntry(source, self.calculate_heuristic(source)))
+        pq.put(PriorityEntry(source, self.calc_heuristic(source)))
 
         # Initialize source node
         self.grid_map[source.x][source.y].cost_to_come = 0
-        self.grid_map[source.x][source.y].heuristic = self.calculate_heuristic(source)
+        self.grid_map[source.x][source.y].heuristic = self.calc_heuristic(source)
 
         while not pq.empty():
             curr = pq.get().coordinate
@@ -311,12 +315,12 @@ class GameMap:
             curr_grid.is_visited = True
 
             for point in self.get_adjacent_points(curr):
-                if self.is_step_feasible(point):
+                if not self.is_step_feasible(curr, point):
                     continue
 
                 grid = self.grid_map[point.x][point.y]
-                grid.cost_to_come = curr_grid.cost_to_come + 1
-                grid.heuristic = self.calculate_heuristic(point)
+                grid.cost_to_come = curr_grid.cost_to_come + self.calc_cost(curr, point)
+                grid.heuristic = self.calc_heuristic(point)
                 cost = grid.cost_to_come + grid.heuristic
 
                 pq.put(PriorityEntry(point, cost))
@@ -353,14 +357,15 @@ if __name__ == "__main__":
     game_map.add_obstacle_line(Point(13, 10), Point(9, 14))
 
     game_map.show_map()
-    # game_map.breadth_first_search(source_point, target_point)
-    # game_map.depth_first_search(source_point, target_point)
-    game_map.a_star(source_point, target_point)
+    # is_path_found = game_map.breadth_first_search(source_point, target_point)
+    # is_path_found = game_map.depth_first_search(source_point, target_point)
+    is_path_found = game_map.a_star(source_point, target_point)
 
     game_map.update_visualization_map()
     game_map.img.set_array(game_map.visualization_map)
 
-    game_map.update_path(game_map.term_point)
-    game_map.visualize_path()
+    if is_path_found:
+        game_map.update_path(game_map.term_point)
+        game_map.visualize_path()
 
     plt.show()
