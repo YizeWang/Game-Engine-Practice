@@ -164,6 +164,13 @@ class GameMap:
                     color = CellColor.DEFAULT
                 self.visualization_map[x][y] = color
 
+    def show_costs(self) -> None:
+        for x in range(X):
+            for y in range(Y):
+                if self.grid_map[x][y].cost_to_come is not None:
+                    text = "{:.1f}".format(self.grid_map[x][y].cost_to_come)
+                    plt.text(y + 0.5, x + 0.55, text, ha="center", va="center", color="k", fontsize=8)  # fmt: skip
+
     def show_map(self) -> None:
         """Display the current state of the map."""
         plt.figure(figsize=FIGURE_SIZE)
@@ -363,6 +370,10 @@ if __name__ == "__main__":
 
     game_map.update_visualization_map()
     game_map.img.set_array(game_map.visualization_map)
+    plt.draw()
+
+    game_map.show_costs()
+    plt.draw()
 
     if is_path_found:
         game_map.update_path(game_map.term_point)
