@@ -31,7 +31,7 @@ COLORS = [
 ]
 
 # Animation speed (seconds)
-PAUSE_PERIOD = 0.001
+PAUSE_PERIOD = 0.01
 
 
 # Figure size
@@ -241,6 +241,9 @@ class GameMap:
         queue: Queue[Point] = Queue()
         queue.put(source)
 
+        # Initialize source node
+        self.grid_map[source.x][source.y].cost_to_come = 0
+
         while not queue.empty():
             curr = queue.get()
             curr_grid = self.grid_map[curr.x][curr.y]
@@ -257,7 +260,13 @@ class GameMap:
                 if not self.is_step_feasible(curr, point):
                     continue
 
+                grid = self.grid_map[point.x][point.y]
+                new_cost = curr_grid.cost_to_come + self.calc_cost(curr, point)
+                if grid.cost_to_come is not None and grid.cost_to_come < new_cost:
+                    continue
+
                 queue.put(point)
+                self.grid_map[point.x][point.y].cost_to_come = new_cost
                 self.grid_map[point.x][point.y].is_to_visit = True
                 self.grid_map[point.x][point.y].previous_coordinate = curr
 
@@ -272,6 +281,9 @@ class GameMap:
         """Perform DFS pathfinding from source to target."""
         stack: LifoQueue[Point] = LifoQueue()
         stack.put(source)
+
+        # Initialize source node
+        self.grid_map[source.x][source.y].cost_to_come = 0
 
         while not stack.empty():
             curr = stack.get()
@@ -289,7 +301,13 @@ class GameMap:
                 if not self.is_step_feasible(curr, point):
                     continue
 
+                grid = self.grid_map[point.x][point.y]
+                new_cost = curr_grid.cost_to_come + self.calc_cost(curr, point)
+                if grid.cost_to_come is not None and grid.cost_to_come < new_cost:
+                    continue
+
                 stack.put(point)
+                self.grid_map[point.x][point.y].cost_to_come = new_cost
                 self.grid_map[point.x][point.y].is_to_visit = True
                 self.grid_map[point.x][point.y].previous_coordinate = curr
 
@@ -369,9 +387,9 @@ if __name__ == "__main__":
     game_map.add_obstacle_line(Point(13, 10), Point(9, 14))
 
     game_map.show_map()
-    # is_path_found = game_map.breadth_first_search(source_point, target_point)
+    is_path_found = game_map.breadth_first_search(source_point, target_point)
     # is_path_found = game_map.depth_first_search(source_point, target_point)
-    is_path_found = game_map.a_star(source_point, target_point)
+    # is_path_found = game_map.a_star(source_point, target_point)
 
     game_map.update_visualization_map()
     game_map.img.set_array(game_map.visualization_map)
