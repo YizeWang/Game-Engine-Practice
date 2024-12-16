@@ -68,6 +68,10 @@ class Grid:
         self.cost_to_come: float = None
         self.heuristic: float = None
 
+        # Fluid field
+        self.cost_to_go: float = None
+        self.is_visited_inverse: bool = False
+
         # Cell state flags
         self.is_source: bool = False
         self.is_target: bool = False
@@ -164,11 +168,18 @@ class GameMap:
                     color = CellColor.DEFAULT
                 self.visualization_map[x][y] = color
 
-    def show_costs(self) -> None:
+    def show_cost_to_come(self) -> None:
         for x in range(X):
             for y in range(Y):
                 if self.grid_map[x][y].cost_to_come is not None:
                     text = "{:.1f}".format(self.grid_map[x][y].cost_to_come)
+                    plt.text(y + 0.5, x + 0.55, text, ha="center", va="center", color="k", fontsize=8)  # fmt: skip
+
+    def show_cost_to_go(self) -> None:
+        for x in range(X):
+            for y in range(Y):
+                if self.grid_map[x][y].cost_to_go is not None:
+                    text = "{:.1f}".format(self.grid_map[x][y].cost_to_go)
                     plt.text(y + 0.5, x + 0.55, text, ha="center", va="center", color="k", fontsize=8)  # fmt: skip
 
     def show_map(self) -> None:
@@ -235,6 +246,36 @@ class GameMap:
         diag_point1 = Point(start.x, end.y)
         diag_point2 = Point(end.x, start.y)
         return not (self.is_obstacle(diag_point1) and self.is_obstacle(diag_point2))
+
+    def update_cost_to_go_map(self) -> None:
+        queue: Queue[Point] = Queue()
+        queue.put(self.term_point)
+
+        # Initialize target node
+        self.grid_map[self.term_point.x][self.term_point.y].cost_to_go = 0
+
+        while not queue.empty():
+            curr = queue.get()
+            curr_grid = self.grid_map[curr.x][curr.y]
+            if curr_grid.is_visited_inverse:
+                continue
+
+            curr_grid.is_visited_inverse = True
+
+            for point in self.get_adjacent_points(curr):
+                if not self.is_step_feasible(curr, point):
+                    continue
+    
+                grid = self.grid_map[point.x][point.y]
+                if grid.is_visited_inverse:
+                    continue
+
+                new_cost = curr_grid.cost_to_go + self.calc_cost(curr, point)
+                if grid.cost_to_go is not None and grid.cost_to_go < new_cost:
+                    continue
+
+                queue.put(point)
+                self.grid_map[point.x][point.y].cost_to_go = new_cost
 
     def breadth_first_search(self, source: Point, target: Point) -> bool:
         """Perform BFS pathfinding from source to target."""
@@ -387,15 +428,18 @@ if __name__ == "__main__":
     game_map.add_obstacle_line(Point(13, 10), Point(9, 14))
 
     game_map.show_map()
-    is_path_found = game_map.breadth_first_search(source_point, target_point)
+    is_path_found = False
+    # is_path_found = game_map.breadth_first_search(source_point, target_point)
     # is_path_found = game_map.depth_first_search(source_point, target_point)
     # is_path_found = game_map.a_star(source_point, target_point)
 
     game_map.update_visualization_map()
     game_map.img.set_array(game_map.visualization_map)
+    # game_map.show_cost_to_come()
     plt.draw()
 
-    game_map.show_costs()
+    game_map.update_cost_to_go_map()
+    game_map.show_cost_to_go()
     plt.draw()
 
     if is_path_found:
