@@ -326,8 +326,13 @@ class GameMap:
                     continue
 
                 grid = self.grid_map[point.x][point.y]
-                grid.cost_to_come = curr_grid.cost_to_come + self.calc_cost(curr, point)
-                grid.heuristic = self.calc_heuristic(point)
+                new_cost = curr_grid.cost_to_come + self.calc_cost(curr, point)
+                if grid.cost_to_come is not None and grid.cost_to_come < new_cost:
+                    continue
+
+                grid.cost_to_come = new_cost
+                if grid.heuristic is None:
+                    grid.heuristic = self.calc_heuristic(point)
                 cost = grid.cost_to_come + grid.heuristic
 
                 pq.put(PriorityEntry(point, cost))
